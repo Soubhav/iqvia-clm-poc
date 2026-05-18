@@ -1,0 +1,111 @@
+{
+  "contracts": [
+    {
+      "contract_id": "CTR-001",
+      "provider_id": "AKL-SURGICAL-001",
+      "provider_name": "Auckland Surgical Centre",
+      "procedure_code": "NZACS-14711",
+      "procedure_name": "Total Knee Replacement",
+      "pricing_model": "tiered",
+      "network_tier": "preferred",
+      "annual_cap": 150,
+      "tiers": [
+        { "from": 1,   "to": 50,   "rate": 4200 },
+        { "from": 51,  "to": 100,  "rate": 3900 },
+        { "from": 101, "to": null, "rate": 3600 }
+      ]
+    },
+    {
+      "contract_id": "CTR-002",
+      "provider_id": "WLG-ORTHO-001",
+      "provider_name": "Wellington Orthopaedics",
+      "procedure_code": "NZACS-14711",
+      "procedure_name": "Total Knee Replacement",
+      "pricing_model": "ffs",
+      "network_tier": "preferred",
+      "annual_cap": 80,
+      "rate": 4050
+    },
+    {
+      "contract_id": "CTR-003",
+      "provider_id": "CHC-SURGICAL-001",
+      "provider_name": "Christchurch Surgical Centre",
+      "procedure_code": "NZACS-09821",
+      "procedure_name": "Knee Arthroscopy",
+      "pricing_model": "ffs",
+      "network_tier": "preferred",
+      "annual_cap": 100,
+      "rate": 2800
+    },
+    {
+      "contract_id": "CTR-004",
+      "provider_id": "AKL-SURGICAL-001",
+      "provider_name": "Auckland Surgical Centre",
+      "procedure_code": "NZACS-09821",
+      "procedure_name": "Knee Arthroscopy",
+      "pricing_model": "tiered",
+      "network_tier": "preferred",
+      "annual_cap": 200,
+      "tiers": [
+        { "from": 1,   "to": 75,   "rate": 2900 },
+        { "from": 76,  "to": 150,  "rate": 2600 },
+        { "from": 151, "to": null, "rate": 2400 }
+      ]
+    },
+    {
+      "contract_id": "CTR-005",
+      "provider_id": "WLG-HOSPITAL-001",
+      "provider_name": "Wellington Regional Hospital",
+      "procedure_code": "NZACS-14711",
+      "procedure_name": "Total Knee Replacement",
+      "pricing_model": "matrix",
+      "network_tier": "preferred",
+      "annual_cap": 120,
+      "matrix": {
+        "dimensions": ["facility_tier", "complexity"],
+        "description": "Rate determined by ward tier (A=main theatre, B=day surgery) × case complexity",
+        "values": {
+          "A:high": 5000,
+          "A:low":  3500,
+          "B:high": 4200,
+          "B:low":  2800
+        }
+      }
+    },
+    {
+      "contract_id": "CTR-006",
+      "provider_id": "AKL-SURGICAL-001",
+      "provider_name": "Auckland Surgical Centre",
+      "procedure_code": "NZACS-27447",
+      "procedure_name": "Total Hip Replacement",
+      "pricing_model": "staircase",
+      "network_tier": "preferred",
+      "annual_cap": 120,
+      "threshold": 100,
+      "rate_before": 5800,
+      "rate_after":  4900
+    }
+  ],
+  "multipliers": [
+    {
+      "name": "out_of_hours",
+      "description": "Procedure performed outside normal business hours",
+      "factor": 1.25
+    },
+    {
+      "name": "bilateral",
+      "description": "Bilateral procedure — same procedure on both sides of the body",
+      "factor": 1.70
+    },
+    {
+      "name": "emergency",
+      "description": "Emergency procedure — unplanned, immediate clinical need",
+      "factor": 1.50
+    },
+    {
+      "name": "repeat_within_30_days",
+      "description": "Same procedure repeated within 30 days of a prior claim",
+      "factor": 0.80
+    }
+  ]
+}
