@@ -651,7 +651,7 @@ function renderContracts() {
     <div class="screen-header">
       <div class="screen-header-top">
         <div><div class="screen-title">Contract Registry</div><div class="screen-sub">${CONTRACTS.length} contracts — click a row to view details and manage</div></div>
-        <button class="btn-sm primary" onclick="showScreen('studio')">+ Draft New Contract</button>
+        <button class="btn-sm primary" onclick="showScreen('studio')">+ New Contract</button>
       </div>
     </div>
     <div class="status-tabs">${tabsHtml}</div>
@@ -1109,15 +1109,32 @@ function renderNetworkList() {
       </div>
     </div>`).join("");
 
+  const contractedCardsHtml = contracted.map(p => {
+    const pContracts = CONTRACTS.filter(c => c.provider === p.name);
+    const activeCount = pContracts.filter(c => c.status === "ACTIVE" || c.status === "EXPIRING").length;
+    return `
+      <div class="kanban-card" onclick="openProviderProfile('${p.id}')" style="cursor:pointer">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <div class="kanban-card-name" style="flex:1">${p.name}</div>
+          <span class="status-pill contracted" style="font-size:10px;flex-shrink:0">Contracted</span>
+        </div>
+        <div class="kanban-card-meta">${p.city} · ${p.specialty}</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin:5px 0 6px">${pContracts.length} contract${pContracts.length !== 1 ? "s" : ""} · ${activeCount} active</div>
+        <div class="kanban-card-footer">
+          <span class="tier-badge tier-${p.tier}">${p.tier.charAt(0).toUpperCase()+p.tier.slice(1)}</span>
+          <span class="kanban-card-owner">${p.relationshipOwner}</span>
+        </div>
+      </div>`;
+  }).join("");
+
   document.getElementById("screen-network").innerHTML = `
     <div class="screen-header">
       <div class="screen-header-top">
         <div>
-          <div class="screen-title">Provider Network — Pipeline</div>
-          <div class="screen-sub">${lead.length + underReview.length + negotiating.length + contracting.length} providers in pipeline · ${contracted.length} contracted (in Provider Registry)</div>
+          <div class="screen-title">Provider Network</div>
+          <div class="screen-sub">${lead.length + underReview.length + negotiating.length + contracting.length} in pipeline · ${contracted.length} contracted · ${PROVIDERS.length} total providers</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn-sm outline" onclick="showScreen('contracts')" style="font-size:11.5px">Provider Registry (${contracted.length}) →</button>
           <button class="btn-sm primary" onclick="alert('Add Provider — validates against NZ HPI. Live in Phase 2.')">+ Add Provider</button>
         </div>
       </div>
@@ -1127,9 +1144,15 @@ function renderNetworkList() {
       <div class="stat-card"><div class="stat-label">Under Review</div><div class="stat-value amber">${underReview.length}</div><div class="stat-sub">HPI + compliance check</div></div>
       <div class="stat-card"><div class="stat-label">Negotiating</div><div class="stat-value purple">${negotiating.length}</div><div class="stat-sub">Terms in discussion</div></div>
       <div class="stat-card"><div class="stat-label" style="color:var(--cyan)">Contracting</div><div class="stat-value" style="color:var(--cyan)">${contracting.length}</div><div class="stat-sub">Final sign-off</div></div>
+      <div class="stat-card"><div class="stat-label" style="color:var(--green)">Contracted</div><div class="stat-value" style="color:var(--green)">${contracted.length}</div><div class="stat-sub">Active providers</div></div>
     </div>
     <div class="screen-body" style="padding-top:16px">
       <div class="kanban-board">${kanbanHtml}</div>
+      ${contracted.length > 0 ? `
+      <div style="margin-top:24px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Contracted Providers (${contracted.length})</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">${contractedCardsHtml}</div>
+      </div>` : ""}
     </div>`;
 }
 
@@ -1140,7 +1163,7 @@ function renderProviderProfile() {
   if (!p) { showScreen("network"); return; }
 
   const stageLabels = { "lead":"Lead","under-review":"Under Review","negotiating":"Negotiating","contracting":"Contracting","contracted":"Contracted" };
-  const stageClasses = { "lead":"lead","under-review":"pending","negotiating":"in-negotiation","contracting":"draft","contracted":"contracted" };
+  const stageClasses = { "lead":"lead","under-review":"pending","negotiating":"in-negotiation","contracting":"negotiation","contracted":"contracted" };
   const stageLabel = stageLabels[p.status] || p.status;
   const stageClass = stageClasses[p.status] || "lead";
   const hpiColor = p.hpiStatus === "Active" ? "var(--green)" : p.hpiStatus === "Pending" ? "var(--amber)" : "var(--red)";
@@ -1258,7 +1281,7 @@ function renderProviderProfile() {
           <div style="padding:14px 18px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:12.5px">
             <div><div style="color:var(--text-muted);margin-bottom:4px">YTD Spend</div><div style="font-size:18px;font-weight:700">${ytdSpendFmt}</div></div>
             <div><div style="color:var(--text-muted);margin-bottom:4px">Annual (projected)</div><div style="font-size:18px;font-weight:700">${annualProjected}</div></div>
-            <div><div style="color:var(--text-muted);margin-bottom:4px">YTD Procedures</div><div style="font-size:18px;font-weight:700">${p.annualVolume > 0 ? p.annualVolume : "—"}</div></div>
+            <div><div style="color:var(--text-muted);margin-bottom:4px">Annual Volume</div><div style="font-size:18px;font-weight:700">${p.annualVolume > 0 ? p.annualVolume + " procedures" : "—"}</div></div>
           </div>
         </div>
 
