@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Environment files — never commit secrets
+.env
+.env.local
+*.env
+
+# Editor / IDE
+.codex/
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log

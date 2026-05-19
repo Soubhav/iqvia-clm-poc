@@ -4,3 +4,9 @@ pydantic==2.7.1
 anthropic==0.25.0
 httpx==0.27.0
 python-dotenv==1.0.1
+
+# LiveKit voice agent — required for the Smart Contract voice feature
+# Safe to omit if you only need the text chat (demo still works without it)
+livekit-agents
+livekit-api
+livekit-plugins-silero
