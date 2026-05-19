@@ -421,7 +421,7 @@ def draft_contract(
     provider = _providers.get(provider_id, {"name": provider_id, "network_tier": "preferred"})
     return {
         "contract_id": f"CTR-DRAFT-{provider_id[:3].upper()}-001",
-        "status": "DRAFT — Awaiting Human Confirmation",
+        "status": "NEGOTIATION — Awaiting Human Confirmation",
         "provider_id": provider_id,
         "provider_name": provider["name"],
         "network_tier": provider.get("network_tier", "preferred"),
@@ -451,7 +451,7 @@ def amend_contract(
     amendment = {
         "amendment_id": f"AMD-{contract_id}-001",
         "base_contract_id": contract_id,
-        "status": "AMENDMENT DRAFT — Awaiting Human Confirmation",
+        "status": "AMENDMENT — Awaiting Human Confirmation",
         "provider_name": contract["provider_name"],
         "procedure_name": contract["procedure_name"],
         "original_terms": {
@@ -524,7 +524,7 @@ def initiate_renewal(contract_id: str) -> dict:
     return {
         "renewal_id": f"RNW-{contract_id}-2027",
         "base_contract_id": contract_id,
-        "status": "RENEWAL DRAFT — Awaiting Human Confirmation",
+        "status": "RENEWAL — Awaiting Human Confirmation",
         "provider_name": contract["provider_name"],
         "procedure_name": contract["procedure_name"],
         "current_expiry": expiry_info.get("expiry", "Unknown"),

@@ -34,7 +34,7 @@ const CONTRACTS = [
     threshold:100, rateBefore:5800, rateAfter:4900 },
   { id:"CTR-007", provider:"Dunedin Surgical Group",       city:"Dunedin",       contractType:"Surgical — Elective", contractSubType:"individual-pricing", procedure:"Knee Arthroscopy",       hpiOrgId:"G00067-T", procedureCode:"NZACS-1422", accCode:"SA11104", model:"FFS",       rateRange:"$2,400",         cap:60,  status:"NEGOTIATION",  effectiveDate:"2027-04-01", expiry:"2027-03-31", ytd:0,   networkTier:"standard",   relationshipOwner:"Sarah Mitchell",
     rate:2400 },
-  { id:"CTR-DRAFT", provider:"Christchurch Surgical Centre",city:"Christchurch", contractType:"Surgical — Elective", contractSubType:"surgical-elective", procedure:"Total Knee Replacement", hpiOrgId:"G00023-P", procedureCode:"NZACS-1471", accCode:"SA11106", model:"TIERED",    rateRange:"$3,420–$3,990",  cap:120, status:"DRAFT",        effectiveDate:"2026-07-01", expiry:"2027-06-30", ytd:0,   networkTier:"preferred", relationshipOwner:"Sarah Mitchell",
+  { id:"CTR-DRAFT", provider:"Christchurch Surgical Centre",city:"Christchurch", contractType:"Surgical — Elective", contractSubType:"surgical-elective", procedure:"Total Knee Replacement", hpiOrgId:"G00023-P", procedureCode:"NZACS-1471", accCode:"SA11106", model:"TIERED",    rateRange:"$3,420–$3,990",  cap:120, status:"NEGOTIATION",   effectiveDate:"2026-07-01", expiry:"2027-06-30", ytd:0,   networkTier:"preferred", relationshipOwner:"Sarah Mitchell",
     tiers:[{from:1,to:40,rate:3990},{from:41,to:80,rate:3705},{from:81,to:null,rate:3420}] },
 ];
 
@@ -87,7 +87,7 @@ const CLAUSES = [
 const PROVIDERS = [
   {
     id:"PRV-001", name:"Auckland Surgical Centre", city:"Auckland",
-    type:"Surgical Centre", tier:"gold", status:"lead",
+    type:"Surgical Centre", tier:"gold", status:"contracted",
     contracts:3, hpiOrgId:"G00001-K", hpiFacilityCode:"F00034",
     nzbn:"9429041000001", specialty:"Orthopaedics",
     onboardingDate:"2019-03-15", relationshipOwner:"Sarah Mitchell",
@@ -538,7 +538,7 @@ function renderDashboard() {
       }).join("")}
     </div>
     <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blue);line-height:1.5;margin-top:4px">
-      <strong>Auckland Surgical Centre</strong> — HPI: G00001-K · Currently at <strong>Lead</strong> stage · 3 contracts active once contracted · Relationship owner: Sarah Mitchell
+      <strong>Auckland Surgical Centre</strong> — HPI: G00001-K · <strong>Contracted</strong> · 3 active contracts · YTD spend $1.28M NZD · Relationship owner: Sarah Mitchell
     </div>`;
 
   document.getElementById("screen-dashboard").innerHTML = `
@@ -642,10 +642,9 @@ function renderContracts() {
     All: CONTRACTS.length,
     Active: CONTRACTS.filter(c=>c.status==="ACTIVE").length,
     Expiring: CONTRACTS.filter(c=>c.status==="EXPIRING").length,
-    Draft: CONTRACTS.filter(c=>c.status==="DRAFT").length,
     Negotiation: CONTRACTS.filter(c=>c.status==="NEGOTIATION").length,
   };
-  const tabsHtml = ["All","Active","Expiring","Draft","Negotiation"].map(s =>
+  const tabsHtml = ["All","Active","Expiring","Negotiation"].map(s =>
     `<button class="status-tab ${contractStatusFilter===s?"active":""}" onclick="setContractStatusFilter('${s}')">${s} <span class="status-tab-count">${statusCounts[s]}</span></button>`
   ).join("");
   document.getElementById("screen-contracts").innerHTML = `
@@ -701,7 +700,6 @@ function filterContracts(search, model) {
     const matchesStatus = contractStatusFilter === "All"
       || (contractStatusFilter === "Active"      && c.status === "ACTIVE")
       || (contractStatusFilter === "Expiring"    && c.status === "EXPIRING")
-      || (contractStatusFilter === "Draft"       && c.status === "DRAFT")
       || (contractStatusFilter === "Negotiation" && c.status === "NEGOTIATION");
     return matchesStatus &&
       (!s || c.id.toLowerCase().includes(s) || c.provider.toLowerCase().includes(s) || c.hpiOrgId.toLowerCase().includes(s) || c.contractType.toLowerCase().includes(s)) &&
@@ -738,7 +736,7 @@ function selectContract(id) {
   } else if (c.model === "MATRIX") {
     rateDetail = Object.entries(c.matrix).map(([k,v]) => { const [f,cx]=k.split(":"); return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:12.5px"><span style="color:var(--text-muted)">Facility ${f} · ${cx} complexity</span><strong>$${v.toLocaleString()}</strong></div>`; }).join("");
   }
-  const canSign = c.status === "DRAFT" || c.status === "NEGOTIATION";
+  const canSign = c.status === "NEGOTIATION";
   const signBtn = canSign
     ? `<button class="btn-sm success" onclick="sendForSignature('${c.id}')">Send for Signature</button>`
     : `<button class="btn-sm disabled" title="Already signed — contract is ${c.status}">Send for Signature</button>`;
@@ -788,6 +786,22 @@ function selectContract(id) {
         <button class="btn-sm outline" onclick="openContractEditor('${c.id}')">Edit Contract</button>
         <button class="btn-sm outline" onclick="showScreen('studio')">Amend in AI Studio</button>
         ${signBtn}
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Version History</div>
+        ${(() => {
+          const vs = c.versions && c.versions.length > 0
+            ? c.versions
+            : [{ v: "v1.0", date: c.effectiveDate, user: c.relationshipOwner || "System", note: "Initial contract" }];
+          return vs.slice().reverse().map((ver, i) => `
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;${i < vs.length-1 ? "border-bottom:1px solid var(--border);" : ""}font-size:12px">
+              <span style="font-family:var(--font-mono);font-weight:700;color:var(--blue);flex-shrink:0;min-width:32px">${ver.v}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:500">${ver.note}</div>
+                <div style="color:var(--text-muted);margin-top:1px">${ver.date} · ${ver.user}</div>
+              </div>
+            </div>`).join("");
+        })()}
       </div>
     </div>`;
 }
@@ -1411,7 +1425,7 @@ function openContractEditor(contractId) {
         </div>
         <div class="editor-context-section">
           <div class="editor-context-label" style="margin-bottom:8px">Approval Status</div>
-          <div class="editor-context-value">${c.status === "DRAFT" ? "⏳ Pending review" : c.status === "NEGOTIATION" ? "🔄 In negotiation" : "✓ " + c.status}</div>
+          <div class="editor-context-value">${c.status === "NEGOTIATION" ? "🔄 In negotiation" : "✓ " + c.status}</div>
         </div>
         <div style="padding:12px 16px">
           <div id="aiAssistPanel" style="display:none">
@@ -1485,8 +1499,17 @@ function editorInviteCollaborate(contractId) {
 }
 
 function saveContractEditor(contractId) {
+  const c = CONTRACTS.find(x => x.id === contractId);
+  if (c) {
+    if (!c.versions) c.versions = [{ v: "v1.0", date: c.effectiveDate, user: c.relationshipOwner || "System", note: "Initial contract" }];
+    const nextNum = c.versions.length + 1;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-NZ", { day:"2-digit", month:"short", year:"numeric" });
+    c.versions.push({ v: `v1.${nextNum}`, date: dateStr, user: "Sarah Mitchell", note: "Manual edit via Contract Editor" });
+    if (selectedContractId === contractId) selectContract(contractId);
+  }
   document.getElementById("contractEditorOverlay")?.remove();
-  showToast(`Contract ${contractId} saved — changes logged to audit trail`);
+  showToast(`Contract ${contractId} saved — v1.${c?.versions?.length || 1} logged to audit trail`);
 }
 
 // ─── Screen 6: Clause Library ─────────────────────────────────────────────────
@@ -2155,7 +2178,7 @@ function renderContractPreview(draft, awaitingConfirm, financialImpact) {
   const isAmendment = !!draft.amendment_id;
   const isRenewal   = !!draft.renewal_id;
 
-  const statusText = draft.status || "DRAFT — Awaiting Confirmation";
+  const statusText = draft.status || "NEGOTIATION — Awaiting Confirmation";
   let statusClass = "contract-status";
   if (statusText.includes("ACTIVE"))    statusClass += " active";
   if (statusText.includes("CONFIRMED")) statusClass += " confirmed";
