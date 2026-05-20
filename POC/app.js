@@ -16,6 +16,13 @@ let templateCategory = "All";
 let networkFilter = "All";
 let previousScreen = "dashboard";
 let currentScreen = "dashboard";
+let contractSearch = "";
+let contractModel = "";
+let providerRegistrySearch = "";
+let adminSection = "users";
+let wizardStep = 1;
+let wizardData = {};
+const COLLAB_EDITOR_URL = "http://localhost:3000";
 
 // ─── Synthetic data ───────────────────────────────────────────────────────────
 
@@ -645,19 +652,22 @@ function renderContracts() {
     Negotiation: CONTRACTS.filter(c=>c.status==="NEGOTIATION").length,
   };
   const tabsHtml = ["All","Active","Expiring","Negotiation"].map(s =>
-    `<button class="status-tab ${contractStatusFilter===s?"active":""}" onclick="setContractStatusFilter('${s}')">${s} <span class="status-tab-count">${statusCounts[s]}</span></button>`
+    `<button class="status-tab ${contractStatusFilter===s?"active":""}" data-filter="${s}" onclick="setContractStatusFilter('${s}')">${s} <span class="status-tab-count">${statusCounts[s]}</span></button>`
   ).join("");
+  const modelOpts = ["","TIERED","FFS","MATRIX","STAIRCASE"];
+  const modelLabels = {"":"All models","TIERED":"Tiered","FFS":"FFS","MATRIX":"Matrix","STAIRCASE":"Staircase"};
+  const modelSelectHtml = modelOpts.map(v => `<option value="${v}" ${contractModel===v?"selected":""}>${modelLabels[v]}</option>`).join("");
   document.getElementById("screen-contracts").innerHTML = `
     <div class="screen-header">
       <div class="screen-header-top">
         <div><div class="screen-title">Contract Registry</div><div class="screen-sub">${CONTRACTS.length} contracts — click a row to view details and manage</div></div>
-        <button class="btn-sm primary" onclick="showScreen('studio')">+ New Contract</button>
+        <button class="btn-sm primary" onclick="showContractWizard()">+ New Contract</button>
       </div>
     </div>
     <div class="status-tabs">${tabsHtml}</div>
     <div class="filter-bar">
-      <div class="search-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Search by provider, HPI code, or contract ID..." oninput="filterContracts(this.value)" /></div>
-      <select class="filter-select" onchange="filterContracts('',this.value)"><option value="">All models</option><option value="TIERED">Tiered</option><option value="FFS">FFS</option><option value="MATRIX">Matrix</option><option value="STAIRCASE">Staircase</option></select>
+      <div class="search-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="contractSearchInput" value="${contractSearch}" placeholder="Search by provider, HPI code, or contract ID..." oninput="filterContracts(this.value)" /></div>
+      <select class="filter-select" onchange="filterContracts(undefined,this.value)">${modelSelectHtml}</select>
     </div>
     <div class="screen-body" style="padding-top:0">
       <div class="registry-layout">
@@ -678,6 +688,7 @@ function renderContracts() {
         <div class="registry-right" id="contractDetail"><div class="section-card" style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px">Select a contract to view details</div></div>
       </div>
     </div>`;
+  filterContracts();
 }
 
 function renderContractRows(list) {
@@ -694,8 +705,10 @@ function renderContractRows(list) {
 }
 
 function filterContracts(search, model) {
-  const s = (search || "").toLowerCase();
-  const m = model || document.querySelector(".filter-select")?.value || "";
+  if (search !== undefined) contractSearch = search;
+  if (model !== undefined) contractModel = model;
+  const s = contractSearch.toLowerCase();
+  const m = contractModel;
   const filtered = CONTRACTS.filter(c => {
     const matchesStatus = contractStatusFilter === "All"
       || (contractStatusFilter === "Active"      && c.status === "ACTIVE")
@@ -711,9 +724,10 @@ function filterContracts(search, model) {
 
 function setContractStatusFilter(filter) {
   contractStatusFilter = filter;
-  renderedScreens.delete("contracts");
-  renderContracts();
-  renderedScreens.add("contracts");
+  document.querySelectorAll(".status-tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.filter === filter);
+  });
+  filterContracts();
 }
 
 function selectContract(id) {
@@ -783,8 +797,13 @@ function selectContract(id) {
       </div>
       <div class="detail-section" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-sm primary" onclick="viewContractDocument('${c.id}')">View Contract</button>
-        <button class="btn-sm outline" onclick="openContractEditor('${c.id}')">Edit Contract</button>
+        ${c.status === "ACTIVE"
+          ? (true /* cosmetic — always show override for demo */
+              ? `<button class="btn-sm outline" onclick="confirmOverrideEdit('${c.id}')">Override &amp; Edit</button>`
+              : `<button class="btn-sm disabled" title="This contract is active and locked. Only Administrators and Senior Contract Managers can edit.">Edit Contract</button>`)
+          : `<button class="btn-sm outline" onclick="openCollabEditor('${c.id}')">Edit Contract</button>`}
         <button class="btn-sm outline" onclick="showScreen('studio')">Amend in AI Studio</button>
+        <button class="btn-sm outline" onclick="showSaveAsTemplateModal('${c.id}')">Save as Template</button>
         ${signBtn}
       </div>
       <div class="detail-section">
@@ -1135,7 +1154,7 @@ function renderNetworkList() {
           <div class="screen-sub">${lead.length + underReview.length + negotiating.length + contracting.length} in pipeline · ${contracted.length} contracted · ${PROVIDERS.length} total providers</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn-sm primary" onclick="alert('Add Provider — validates against NZ HPI. Live in Phase 2.')">+ Add Provider</button>
+          <button class="btn-sm primary" onclick="showAddProviderModal()">+ Add Provider</button>
         </div>
       </div>
     </div>
@@ -1150,10 +1169,160 @@ function renderNetworkList() {
       <div class="kanban-board">${kanbanHtml}</div>
       ${contracted.length > 0 ? `
       <div style="margin-top:24px">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">Contracted Providers (${contracted.length})</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">${contractedCardsHtml}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--green)">Contracted Providers (${contracted.length})</div>
+          <div class="search-box" style="width:220px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="providerRegistrySearchInput" value="${providerRegistrySearch}" placeholder="Search contracted providers..." oninput="filterProviderRegistry(this.value)" /></div>
+        </div>
+        <div id="contractedProviderGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">${contractedCardsHtml}</div>
       </div>` : ""}
     </div>`;
+}
+
+function showAddProviderModal() {
+  const existing = document.getElementById("addProviderModal");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "addProviderModal";
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:520px">
+      <div class="modal-header">
+        <div class="modal-title">Add New Provider</div>
+        <span class="modal-close" onclick="document.getElementById('addProviderModal').remove()">×</span>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:1/-1">
+            <label class="form-label">Provider Type <span style="color:var(--red)">*</span></label>
+            <select id="apType" class="form-input">
+              <option value="">Select type...</option>
+              <option>Hospital</option><option>Specialist Clinic</option><option>Allied Health</option><option>GP Practice</option><option>Diagnostic Centre</option><option>Aged Care</option><option>Surgical Centre</option>
+            </select>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="form-label">Provider Name <span style="color:var(--red)">*</span></label>
+            <input id="apName" class="form-input" type="text" placeholder="e.g. North Shore Surgical Centre" />
+          </div>
+          <div>
+            <label class="form-label">Specialty <span style="color:var(--red)">*</span></label>
+            <select id="apSpecialty" class="form-input">
+              <option value="">Select...</option>
+              <option>Orthopaedics</option><option>Cardiology</option><option>General Surgery</option><option>Oncology</option><option>Multi-Specialty</option><option>Allied Health</option><option>Mental Health</option><option>Diagnostics</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Relationship Owner</label>
+            <select id="apOwner" class="form-input">
+              ${USERS.filter(u=>u.role!=="viewer").map(u=>`<option value="${u.name}">${u.name}</option>`).join("")}
+            </select>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="form-label">Street Address</label>
+            <input id="apStreet" class="form-input" type="text" placeholder="e.g. 123 Shortland Street" />
+          </div>
+          <div>
+            <label class="form-label">City <span style="color:var(--red)">*</span></label>
+            <input id="apCity" class="form-input" type="text" placeholder="Auckland" />
+          </div>
+          <div>
+            <label class="form-label">Postcode</label>
+            <input id="apPostcode" class="form-input" type="text" placeholder="1010" maxlength="4" />
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="form-label">Region</label>
+            <select id="apRegion" class="form-input">
+              <option value="">Select region...</option>
+              <option>Auckland</option><option>Wellington</option><option>Canterbury</option><option>Waikato</option><option>Bay of Plenty</option><option>Otago</option><option>Southland</option><option>Northland</option><option>Hawke's Bay</option><option>Nelson / Marlborough</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:var(--surface-hover);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text-muted)">
+          <strong style="color:var(--text)">HPI Validation:</strong> The provider will be validated against the NZ Health Provider Index on save. A simulated HPI lookup will run automatically.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm outline" style="margin-right:auto" onclick="showBulkUploadTooltip(this)" title="Phase 2 — CSV bulk upload coming">⬆ Bulk Upload</button>
+        <button class="btn-sm outline" onclick="document.getElementById('addProviderModal').remove()">Cancel</button>
+        <button class="btn-sm outline" onclick="submitAddProvider(true)">Save & Add Another</button>
+        <button class="btn-sm primary" onclick="submitAddProvider(false)">Save Provider</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function showBulkUploadTooltip(btn) {
+  showToast("Bulk Upload (CSV) — Phase 2 coming soon", "#6366f1");
+}
+
+function submitAddProvider(addAnother) {
+  const type     = document.getElementById("apType")?.value;
+  const name     = document.getElementById("apName")?.value?.trim();
+  const specialty= document.getElementById("apSpecialty")?.value;
+  const owner    = document.getElementById("apOwner")?.value;
+  const street   = document.getElementById("apStreet")?.value?.trim();
+  const city     = document.getElementById("apCity")?.value?.trim();
+  const postcode = document.getElementById("apPostcode")?.value?.trim();
+  const region   = document.getElementById("apRegion")?.value;
+
+  if (!type)     { showToast("Provider Type is required", "#ef4444"); return; }
+  if (!name)     { showToast("Provider Name is required", "#ef4444"); return; }
+  if (!specialty){ showToast("Specialty is required", "#ef4444"); return; }
+  if (!city)     { showToast("City is required", "#ef4444"); return; }
+
+  const newId = "PRV-" + String(PROVIDERS.length + 1).padStart(3, "0");
+  const hpiId = "G" + String(Math.floor(Math.random()*99900)+100).padStart(5,"0") + "-" + String.fromCharCode(65+Math.floor(Math.random()*26));
+  PROVIDERS.push({
+    id: newId, name, city, type, tier: "standard", status: "lead",
+    contracts: 0, hpiOrgId: hpiId, hpiFacilityCode: "F" + String(Math.floor(Math.random()*99900)+100).padStart(5,"0"),
+    nzbn: "9429041" + String(Math.floor(Math.random()*1000000)).padStart(6,"0"),
+    specialty, onboardingDate: new Date().toISOString().slice(0,10),
+    relationshipOwner: owner,
+    street, postcode, region,
+    annualVolume: 0, ytdSpend: 0, hpiStatus: "Active",
+    hpiExpiry: "2027-12-31",
+    contact: "", contactEmail: "", contactPhone: "",
+    contacts: [], complianceDocs: [], activityLog: [
+      { type:"system", date: new Date().toLocaleDateString("en-NZ",{day:"2-digit",month:"short",year:"numeric"}), user:"System", description:`Provider added via manual entry — HPI simulated: ${hpiId} Active` }
+    ]
+  });
+
+  renderedScreens.delete("network");
+  showToast(`✓ ${name} added to pipeline as Lead`);
+  if (addAnother) {
+    document.getElementById("addProviderModal").remove();
+    showAddProviderModal();
+  } else {
+    document.getElementById("addProviderModal").remove();
+    showScreen("network");
+  }
+}
+
+function filterProviderRegistry(search) {
+  providerRegistrySearch = search || "";
+  const s = providerRegistrySearch.toLowerCase();
+  const contracted = PROVIDERS.filter(p => p.status === "contracted");
+  const filtered = s
+    ? contracted.filter(p => p.name.toLowerCase().includes(s) || p.city.toLowerCase().includes(s) || (p.specialty||"").toLowerCase().includes(s))
+    : contracted;
+  const grid = document.getElementById("contractedProviderGrid");
+  if (!grid) return;
+  grid.innerHTML = filtered.map(p => {
+    const pContracts = CONTRACTS.filter(c => c.provider === p.name);
+    const activeCount = pContracts.filter(c => c.status === "ACTIVE" || c.status === "EXPIRING").length;
+    return `
+      <div class="kanban-card" onclick="openProviderProfile('${p.id}')" style="cursor:pointer">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <div class="kanban-card-name" style="flex:1">${p.name}</div>
+          <span class="status-pill contracted" style="font-size:10px;flex-shrink:0">Contracted</span>
+        </div>
+        <div class="kanban-card-meta">${p.city} · ${p.specialty}</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin:5px 0 6px">${pContracts.length} contract${pContracts.length !== 1 ? "s" : ""} · ${activeCount} active</div>
+        <div class="kanban-card-footer">
+          <span class="tier-badge tier-${p.tier}">${p.tier.charAt(0).toUpperCase()+p.tier.slice(1)}</span>
+          <span class="kanban-card-owner">${p.relationshipOwner}</span>
+        </div>
+      </div>`;
+  }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:12px 0">No providers match "${providerRegistrySearch}"</div>`;
 }
 
 // ─── Screen: Provider Profile (full-page) ────────────────────────────────────
@@ -1210,8 +1379,8 @@ function renderProviderProfile() {
     : `<div style="font-size:12.5px;color:var(--text-muted);padding:8px 0">No contracts yet.</div>`;
 
   const createBtnHtml = canCreateContract
-    ? `<button class="btn-sm primary" onclick="showScreen('studio')">+ Create New Contract</button>`
-    : `<button class="btn-sm disabled" data-tip-title="Contract creation locked" data-tip-desc="Available once provider reaches Contracted status — after HPI validation, compliance docs, and negotiation are complete." data-tip-phase="Onboarding">+ Create New Contract</button>`;
+    ? `<button class="btn-sm primary" onclick="showContractWizard('${p.id}')">+ Create New Contract</button>`
+    : `<button class="btn-sm disabled" title="Contract creation available after provider onboarding is complete">+ Create New Contract</button>`;
 
   const activityIcons = { call:"📞", email:"✉️", meeting:"🤝", note:"📝", system:"⚙️" };
   const activityHtml = [...(p.activityLog || [])].reverse().map(entry => `
@@ -1227,8 +1396,9 @@ function renderProviderProfile() {
     <div class="screen-header">
       <div class="screen-header-top">
         <div style="display:flex;align-items:center;gap:12px">
-          <button class="btn-sm outline" onclick="goBack()">← Back</button>
+          <button class="btn-sm outline" onclick="showScreen('network')">← Provider Network</button>
           <div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Provider Network → ${p.name}</div>
             <div class="screen-title">${p.name}</div>
             <div class="screen-sub">${p.type} · ${p.city} · ${p.specialty}</div>
           </div>
@@ -1408,7 +1578,7 @@ function openContractEditor(contractId) {
 
   overlay.innerHTML = `
     <div class="editor-topbar">
-      <button class="btn-sm outline" onclick="document.getElementById('contractEditorOverlay').remove()">← Back to View</button>
+      <button class="btn-sm outline" onclick="document.getElementById('contractEditorOverlay').remove();showScreen('contracts')">← Contract Registry</button>
       <span class="editor-topbar-title">${c.provider} — ${c.id} · ${c.contractType}</span>
       <div style="display:flex;gap:7px">
         <button class="btn-sm outline" onclick="editorFindReplace()">Find & Replace</button>
@@ -1469,14 +1639,467 @@ function openContractEditor(contractId) {
   document.body.appendChild(overlay);
 }
 
+// ─── Collab Editor launcher ───────────────────────────────────────────────────
+
+function openCollabEditor(contractId) {
+  const c = CONTRACTS.find(x => x.id === contractId);
+  if (!c) return;
+  const seededIds = ["CTR-001","CTR-002","CTR-003","CTR-004","CTR-005","CTR-006","CTR-007","CTR-DRAFT"];
+  if (seededIds.includes(contractId)) {
+    window.open(`${COLLAB_EDITOR_URL}/contract/${contractId}`, "_blank");
+  } else {
+    const payload = { id:c.id, provider:c.provider, city:c.city||"", hpiOrgId:c.hpiOrgId||"", contractType:c.contractType, procedure:c.procedure||"General Services", procedureCode:c.procedureCode||"", model:c.model||"FFS", rateRange:c.rateRange||"", cap:c.cap||100, status:c.status, effectiveDate:c.effectiveDate, expiry:c.expiry, relationshipOwner:c.relationshipOwner };
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    window.open(`${COLLAB_EDITOR_URL}/contract/${contractId}?data=${encodeURIComponent(encoded)}`, "_blank");
+  }
+}
+
+function confirmOverrideEdit(contractId) {
+  if (confirm("This contract is active and locked. Editing will be logged. Continue?")) {
+    openCollabEditor(contractId);
+  }
+}
+
+// ─── Contract Creation Wizard ─────────────────────────────────────────────────
+
+function showContractWizard(prefilledProviderId) {
+  const existing = document.getElementById("contractWizardModal");
+  if (existing) existing.remove();
+  wizardStep = 1;
+  wizardData = { prefilledProviderId: prefilledProviderId || null };
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  const existing = document.getElementById("contractWizardModal");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "contractWizardModal";
+  overlay.className = "modal-overlay";
+
+  const steps = ["Definition","Starting Point","Review & Create"];
+  const stepsHtml = steps.map((s,i) => `
+    <div class="wizard-step ${wizardStep===i+1?"active":wizardStep>i+1?"done":""}">
+      <div class="wizard-step-num">${wizardStep>i+1?"✓":i+1}</div>
+      <div class="wizard-step-label">${s}</div>
+    </div>`).join('<div class="wizard-step-line"></div>');
+
+  let bodyHtml = "";
+  if (wizardStep === 1) {
+    const contractedProviders = PROVIDERS.filter(p => p.status === "contracted");
+    const prefilled = wizardData.prefilledProviderId;
+    bodyHtml = `
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:1/-1">
+            <label class="form-label">Provider <span style="color:var(--red)">*</span></label>
+            <select id="wProvider" class="form-input" ${prefilled?"disabled":""}>
+              <option value="">Select contracted provider...</option>
+              ${contractedProviders.map(p => `<option value="${p.id}" ${p.id===prefilled?"selected":""}>${p.name} · ${p.city}</option>`).join("")}
+            </select>
+            ${prefilled?`<input type="hidden" id="wProviderHidden" value="${prefilled}" />`:""}
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="form-label">Contract Type <span style="color:var(--red)">*</span></label>
+            <select id="wType" class="form-input">
+              <option value="">Select type...</option>
+              <option value="Master Service Agreement (MSA)">Master Service Agreement (MSA)</option>
+              <option value="Individual Pricing Contract">Individual Pricing Contract</option>
+              <option value="Surgical — Elective">Surgical — Elective</option>
+              <option value="Government Contract">Government Contract</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Effective Date <span style="color:var(--red)">*</span></label>
+            <input id="wEffective" class="form-input" type="date" value="${new Date().toISOString().slice(0,10)}" />
+          </div>
+          <div>
+            <label class="form-label">Expiry Date <span style="color:var(--red)">*</span></label>
+            <input id="wExpiry" class="form-input" type="date" value="${new Date(Date.now()+365*86400000).toISOString().slice(0,10)}" />
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="form-label">Relationship Owner</label>
+            <select id="wOwner" class="form-input">
+              ${USERS.filter(u=>u.role!=="viewer").map(u=>`<option value="${u.name}" ${u.name==="Sarah Mitchell"?"selected":""}>${u.name} — ${u.roleLabel}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm outline" onclick="document.getElementById('contractWizardModal').remove()">Cancel</button>
+        <button class="btn-sm primary" onclick="wizardNext()">Next →</button>
+      </div>`;
+  } else if (wizardStep === 2) {
+    bodyHtml = `
+      <div class="modal-body">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Choose a starting point for this contract.</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label class="wizard-option ${wizardData.startMode==="scratch"?"selected":""}" onclick="wizardSelectStart('scratch')">
+            <input type="radio" name="startMode" value="scratch" ${wizardData.startMode==="scratch"?"checked":""} style="display:none">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="font-size:20px;flex-shrink:0">📄</div>
+              <div><div style="font-size:13px;font-weight:700">Start from scratch</div><div style="font-size:12px;color:var(--text-muted)">Open a blank contract in the editor — you write the content.</div></div>
+            </div>
+          </label>
+          ${TEMPLATES.map(t => `
+          <label class="wizard-option ${wizardData.startMode==="tpl-"+t.id?"selected":""}" onclick="wizardSelectStart('tpl-${t.id}')">
+            <input type="radio" name="startMode" value="tpl-${t.id}" ${wizardData.startMode==="tpl-"+t.id?"checked":""} style="display:none">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div style="font-size:20px;flex-shrink:0">📋</div>
+              <div>
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px"><div style="font-size:13px;font-weight:700">${t.name}</div><span class="model-chip ${t.model.toLowerCase()}" style="font-size:9px">${t.model}</span></div>
+                <div style="font-size:12px;color:var(--text-muted)">${t.description}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${t.clauses} clauses · Used in ${t.usedIn} contracts</div>
+              </div>
+            </div>
+          </label>`).join("")}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm outline" onclick="wizardPrev()">← Back</button>
+        <button class="btn-sm outline" onclick="document.getElementById('contractWizardModal').remove()">Cancel</button>
+        <button class="btn-sm primary" onclick="wizardNext()">Next →</button>
+      </div>`;
+  } else if (wizardStep === 3) {
+    const prov = PROVIDERS.find(p => p.id === (wizardData.prefilledProviderId || document.getElementById("wProvider")?.value)) || PROVIDERS.find(p => p.id === wizardData.providerId);
+    const startLabel = wizardData.startMode === "scratch" ? "Blank contract" : TEMPLATES.find(t=>"tpl-"+t.id===wizardData.startMode)?.name || wizardData.startMode;
+    bodyHtml = `
+      <div class="modal-body">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Review your new contract before creating it.</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-muted)">Provider</span><strong>${prov?.name || wizardData.providerName || "—"}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-muted)">Contract Type</span><strong>${wizardData.contractType}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-muted)">Term</span><strong>${wizardData.effectiveDate} → ${wizardData.expiry}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-muted)">Relationship Owner</span><strong>${wizardData.owner}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:7px 0"><span style="color:var(--text-muted)">Starting Point</span><strong>${startLabel}</strong></div>
+        </div>
+        <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text);margin-top:12px">
+          The contract will be saved as <strong>Draft</strong> and opened in the collaborative editor. You can fill in pricing and clauses from there.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm outline" onclick="wizardPrev()">← Back</button>
+        <button class="btn-sm outline" onclick="document.getElementById('contractWizardModal').remove()">Cancel</button>
+        <button class="btn-sm primary" onclick="submitContractWizard()">Create Contract &amp; Open Editor →</button>
+      </div>`;
+  }
+
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:560px;max-height:90vh;overflow-y:auto">
+      <div class="modal-header">
+        <div class="modal-title">New Contract</div>
+        <span class="modal-close" onclick="document.getElementById('contractWizardModal').remove()">×</span>
+      </div>
+      <div class="wizard-steps">${stepsHtml}</div>
+      ${bodyHtml}
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function wizardSelectStart(mode) {
+  wizardData.startMode = mode;
+  document.querySelectorAll(".wizard-option").forEach(el => {
+    el.classList.toggle("selected", el.getAttribute("onclick")?.includes(`'${mode}'`));
+  });
+}
+
+function wizardNext() {
+  if (wizardStep === 1) {
+    const providerId = document.getElementById("wProviderHidden")?.value || document.getElementById("wProvider")?.value;
+    const contractType = document.getElementById("wType")?.value;
+    const effectiveDate = document.getElementById("wEffective")?.value;
+    const expiry = document.getElementById("wExpiry")?.value;
+    const owner = document.getElementById("wOwner")?.value;
+    if (!providerId) { showToast("Please select a provider", "#ef4444"); return; }
+    if (!contractType) { showToast("Please select a contract type", "#ef4444"); return; }
+    if (!effectiveDate || !expiry) { showToast("Effective and expiry dates are required", "#ef4444"); return; }
+    const prov = PROVIDERS.find(p => p.id === providerId);
+    Object.assign(wizardData, { providerId, providerName: prov?.name, contractType, effectiveDate, expiry, owner });
+  }
+  if (wizardStep === 2) {
+    if (!wizardData.startMode) { showToast("Please select a starting point", "#ef4444"); return; }
+  }
+  wizardStep++;
+  renderWizardStep();
+}
+
+function wizardPrev() {
+  wizardStep = Math.max(1, wizardStep - 1);
+  renderWizardStep();
+}
+
+function submitContractWizard() {
+  const newId = "CTR-" + String(CONTRACTS.length + 1).padStart(3, "0");
+  const prov = PROVIDERS.find(p => p.id === wizardData.providerId);
+  const chosenTemplate = wizardData.startMode && wizardData.startMode !== "scratch"
+    ? TEMPLATES.find(t => "tpl-" + t.id === wizardData.startMode) : null;
+
+  const newContract = {
+    id: newId,
+    provider: prov?.name || wizardData.providerName,
+    city: prov?.city || "",
+    contractType: wizardData.contractType,
+    contractSubType: "individual-pricing",
+    procedure: chosenTemplate ? chosenTemplate.name : "General Services",
+    hpiOrgId: prov?.hpiOrgId || "",
+    procedureCode: "",
+    accCode: "",
+    model: chosenTemplate?.model || "FFS",
+    rateRange: chosenTemplate ? `$${chosenTemplate.baseRate.toLocaleString()} base` : "TBD",
+    cap: 100,
+    status: "NEGOTIATION",
+    effectiveDate: wizardData.effectiveDate,
+    expiry: wizardData.expiry,
+    ytd: 0,
+    networkTier: prov?.tier || "standard",
+    relationshipOwner: wizardData.owner,
+    rate: chosenTemplate?.baseRate || 0,
+    _fromTemplate: chosenTemplate?.name || null,
+    _templateClauses: chosenTemplate?.clauseList || [],
+  };
+  CONTRACTS.push(newContract);
+  renderedScreens.delete("contracts");
+  document.getElementById("contractWizardModal").remove();
+  showToast(`✓ ${newId} created as Draft — opening editor...`);
+  showScreen("contracts");
+  setTimeout(() => openContractEditorFromWizard(newId), 400);
+}
+
+function openContractEditorFromWizard(contractId) {
+  const c = CONTRACTS.find(x => x.id === contractId);
+  if (!c) return;
+
+  const existing = document.getElementById("contractEditorOverlay");
+  if (existing) existing.remove();
+
+  const linkedClauses = c._templateClauses && c._templateClauses.length
+    ? c._templateClauses
+    : ["Standard Indemnity — Bilateral", "Patient Data — NZ Privacy Act 2020", "Termination for Convenience — 90 Days"];
+
+  const overlay = document.createElement("div");
+  overlay.id = "contractEditorOverlay";
+  overlay.className = "editor-overlay";
+
+  let editorContent = "";
+  if (c._fromTemplate) {
+    editorContent = getContractFullText(c) +
+      `<h2>Applicable Clauses (from template: ${c._fromTemplate})</h2>` +
+      linkedClauses.map(cl => {
+        const found = CLAUSES.find(x => x.title === cl);
+        return found
+          ? `<h3>${found.title}</h3><p>${found.body}</p>`
+          : `<h3>${cl}</h3><p><em>Clause content to be populated.</em></p>`;
+      }).join("");
+  } else {
+    editorContent = `<h1>HEALTH SERVICES AGREEMENT</h1>
+<p>Contract ID: ${c.id} &nbsp;·&nbsp; Provider: ${c.provider} &nbsp;·&nbsp; Type: ${c.contractType}</p>
+<p>&nbsp;</p>
+<h2>1. Parties</h2><p>This Agreement is entered into between <strong>NZ Private Health Insurer Limited</strong> and <strong>${c.provider}</strong> (HPI: ${c.hpiOrgId || "TBC"}).</p>
+<h2>2. Term</h2><p>Commencement: ${c.effectiveDate} &nbsp;·&nbsp; Expiry: ${c.expiry}</p>
+<h2>3. Services</h2><p><em>Describe the services to be provided under this agreement.</em></p>
+<h2>4. Pricing &amp; Rates</h2><p><em>Insert rate schedule or pricing model here.</em></p>
+<h2>5. Compliance &amp; Accreditation</h2><p><em>Insert compliance requirements here.</em></p>
+<h2>6. Reporting &amp; Claims</h2><p><em>Insert reporting obligations here.</em></p>
+<h2>7. Termination</h2><p><em>Insert termination provisions here.</em></p>`;
+  }
+
+  overlay.innerHTML = `
+    <div class="editor-topbar">
+      <button class="btn-sm outline" onclick="document.getElementById('contractEditorOverlay').remove();showScreen('contracts')">← Contract Registry</button>
+      <span class="editor-topbar-title">${c.provider} — ${c.id} · ${c.contractType}</span>
+      <div style="display:flex;gap:7px">
+        <button class="btn-sm outline" onclick="editorFindReplace()">Find &amp; Replace</button>
+        <button class="btn-sm outline" onclick="editorInviteCollaborate('${c.id}')">Invite to Collaborate</button>
+        <button class="btn-sm primary" onclick="saveContractEditor('${c.id}')">Save</button>
+      </div>
+    </div>
+    <div class="editor-layout">
+      <div class="editor-main">
+        <div class="editor-toolbar">
+          <button class="editor-btn" onclick="document.execCommand('bold')" title="Bold"><strong>B</strong></button>
+          <button class="editor-btn" onclick="document.execCommand('italic')" title="Italic"><em>I</em></button>
+          <button class="editor-btn" onclick="document.execCommand('underline')" title="Underline"><u>U</u></button>
+          <div class="editor-divider"></div>
+          <button class="editor-btn" onclick="document.execCommand('insertUnorderedList')" title="List">≡ List</button>
+          <button class="editor-btn" onclick="document.execCommand('formatBlock','',null,'<h2>')" title="Heading">H2</button>
+          <div class="editor-divider"></div>
+          <button class="editor-btn" onclick="insertClauseFromEditor()" title="Insert clause from library">+ Insert Clause</button>
+          <button class="editor-btn" onclick="insertPriceTable('${c.id}')" title="Insert pricing table">+ Price Table</button>
+          <div class="editor-divider"></div>
+          <button class="editor-btn active" onclick="showAIAssist('${c.id}')" title="AI clause suggestions">✦ AI Assist</button>
+        </div>
+        <div class="editor-canvas" id="editorCanvas" contenteditable="true">${editorContent}</div>
+      </div>
+      <div class="editor-context">
+        <div class="editor-context-section" style="background:var(--surface-hover);padding:12px 16px;border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px">Contract Context</div>
+          <div class="editor-context-label">Contract ID</div><div class="editor-context-value" style="margin-bottom:8px;font-family:var(--font-mono);color:var(--blue)">${c.id}</div>
+          <div class="editor-context-label">Provider</div><div class="editor-context-value" style="margin-bottom:8px">${c.provider}</div>
+          <div class="editor-context-label">Type</div><div class="editor-context-value" style="margin-bottom:8px">${c.contractType}</div>
+          <div class="editor-context-label">Term</div><div class="editor-context-value" style="margin-bottom:8px">${c.effectiveDate} → ${c.expiry}</div>
+          <div class="editor-context-label">Status</div><div style="margin-bottom:0"><span class="status-pill negotiation" style="font-size:10px">DRAFT</span></div>
+        </div>
+        <div class="editor-context-section">
+          <div class="editor-context-label" style="margin-bottom:8px">${c._fromTemplate ? "Template Clauses" : "Linked Clauses"}</div>
+          ${linkedClauses.map(cl => `<span class="linked-clause-chip">${cl}</span>`).join("")}
+        </div>
+        <div class="editor-context-section">
+          <div class="editor-context-label" style="margin-bottom:4px">Starting Point</div>
+          <div class="editor-context-value">${c._fromTemplate ? `📋 ${c._fromTemplate}` : "📄 Blank contract"}</div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// ─── Insert Clause Search Panel ───────────────────────────────────────────────
+
 function insertClauseFromEditor() {
-  const clause = CLAUSES.find(c => c.status === "approved");
-  if (!clause) return;
+  showInsertClausePanel();
+}
+
+function showInsertClausePanel() {
+  const existing = document.getElementById("clauseSearchPanel");
+  if (existing) { existing.remove(); return; }
+  const panel = document.createElement("div");
+  panel.id = "clauseSearchPanel";
+  panel.className = "modal-overlay";
+  panel.innerHTML = `
+    <div class="modal-box" style="width:580px;max-height:80vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <div class="modal-title">Insert Clause</div>
+        <span class="modal-close" onclick="document.getElementById('clauseSearchPanel').remove()">×</span>
+      </div>
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+        <div class="search-box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="clausePanelSearch" placeholder="Search clauses by title, category, or tag..." oninput="filterClausePanel(this.value)" autofocus />
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="status-tab active" data-cat="All" onclick="filterClausePanel('',this)" style="font-size:11.5px;padding:3px 10px">All</button>
+          ${[...new Set(CLAUSES.map(c=>c.category))].map(cat=>`<button class="status-tab" data-cat="${cat}" onclick="filterClausePanel('',this)" style="font-size:11.5px;padding:3px 10px">${cat}</button>`).join("")}
+        </div>
+      </div>
+      <div id="clausePanelList" style="flex:1;overflow-y:auto;padding:12px 18px;display:flex;flex-direction:column;gap:8px">
+        ${renderClausePanelItems(CLAUSES)}
+      </div>
+    </div>`;
+  document.body.appendChild(panel);
+}
+
+function renderClausePanelItems(list) {
+  if (!list.length) return `<div style="color:var(--text-muted);font-size:13px;text-align:center;padding:20px">No clauses match your search.</div>`;
+  return list.map(cl => `
+    <div class="clause-panel-item" onclick="insertClauseSelected('${cl.id}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:700">${cl.title}</div>
+        <span class="status-pill ${cl.status==="approved"?"active":"pending"}" style="font-size:10px;flex-shrink:0">${cl.status}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:5px">${cl.category} · ${cl.version} · Reviewed ${cl.lastReviewed}</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${cl.body}</div>
+      <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${cl.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+    </div>`).join("");
+}
+
+let clausePanelCategoryFilter = "All";
+function filterClausePanel(search, btn) {
+  if (btn) {
+    clausePanelCategoryFilter = btn.dataset.cat;
+    document.querySelectorAll("#clauseSearchPanel .status-tab").forEach(t => t.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("clausePanelSearch").value = "";
+    search = "";
+  }
+  const s = (search || document.getElementById("clausePanelSearch")?.value || "").toLowerCase();
+  const filtered = CLAUSES.filter(cl => {
+    const matchCat = clausePanelCategoryFilter === "All" || cl.category === clausePanelCategoryFilter;
+    const matchSearch = !s || cl.title.toLowerCase().includes(s) || cl.category.toLowerCase().includes(s) || cl.tags.some(t=>t.includes(s));
+    return matchCat && matchSearch;
+  });
+  const list = document.getElementById("clausePanelList");
+  if (list) list.innerHTML = renderClausePanelItems(filtered);
+}
+
+function insertClauseSelected(clauseId) {
+  const cl = CLAUSES.find(c => c.id === clauseId);
+  if (!cl) return;
   const canvas = document.getElementById("editorCanvas");
-  if (!canvas) return;
-  canvas.focus();
-  document.execCommand("insertHTML", false, `<h2>${clause.title}</h2><p>${clause.body}</p>`);
-  showToast("Clause inserted: " + clause.title);
+  if (canvas) {
+    canvas.focus();
+    document.execCommand("insertHTML", false, `<h2>${cl.title}</h2><p>${cl.body}</p>`);
+  }
+  document.getElementById("clauseSearchPanel")?.remove();
+  showToast("Clause inserted: " + cl.title);
+}
+
+// ─── Save as Template ─────────────────────────────────────────────────────────
+
+function showSaveAsTemplateModal(contractId) {
+  const c = CONTRACTS.find(x => x.id === contractId);
+  if (!c) return;
+  const existing = document.getElementById("saveTemplateModal");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "saveTemplateModal";
+  overlay.className = "modal-overlay";
+  const suggestedName = `${c.contractType} — ${c.provider}`;
+  overlay.innerHTML = `
+    <div class="modal-box" style="width:480px">
+      <div class="modal-header">
+        <div class="modal-title">Save as Template</div>
+        <span class="modal-close" onclick="document.getElementById('saveTemplateModal').remove()">×</span>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label class="form-label">Template Name <span style="color:var(--red)">*</span></label>
+          <input id="tplName" class="form-input" type="text" value="${suggestedName}" placeholder="e.g. Surgical Elective — Standard Tiered" />
+        </div>
+        <div>
+          <label class="form-label">Category <span style="color:var(--red)">*</span></label>
+          <select id="tplCategory" class="form-input">
+            <option value="Surgical" ${c.contractType?.includes("Surgical")?"selected":""}>Surgical</option>
+            <option value="Specialist">Specialist</option>
+            <option value="Government" ${c.contractType?.includes("Government")?"selected":""}>Government</option>
+            <option value="Allied Health">Allied Health</option>
+            <option value="Mental Health">Mental Health</option>
+            <option value="Diagnostics">Diagnostics</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Short Description</label>
+          <textarea id="tplDesc" class="form-input" rows="2" placeholder="Optional — describe when to use this template..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm outline" onclick="document.getElementById('saveTemplateModal').remove()">Cancel</button>
+        <button class="btn-sm primary" onclick="submitSaveAsTemplate('${contractId}')">Save Template</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function submitSaveAsTemplate(contractId) {
+  const name     = document.getElementById("tplName")?.value?.trim();
+  const category = document.getElementById("tplCategory")?.value;
+  const desc     = document.getElementById("tplDesc")?.value?.trim();
+  if (!name) { showToast("Template name is required", "#ef4444"); return; }
+  const c = CONTRACTS.find(x => x.id === contractId);
+  const newTpl = {
+    id: "TPL-" + String(TEMPLATES.length + 1).padStart(3, "0"),
+    name, category,
+    description: desc || `Contract template based on ${c?.provider || contractId}.`,
+    tags: [category.toLowerCase().replace(/ /g,"-"), c?.model?.toLowerCase() || "ffs"],
+    model: c?.model || "FFS",
+    baseRate: c?.rate || (c?.tiers?.[0]?.rate) || 0,
+    clauses: 6, lastUpdated: new Date().toLocaleDateString("en-NZ",{month:"short",year:"numeric"}), usedIn: 1,
+    applicableTo: "All providers",
+    pricingNote: "Based on " + (c?.contractType || "standard contract") + " pricing.",
+    clauseList: []
+  };
+  TEMPLATES.push(newTpl);
+  renderedScreens.delete("templates");
+  renderedScreens.delete("admin");
+  document.getElementById("saveTemplateModal").remove();
+  showToast(`✓ Template "${name}" saved — visible in Template Repository`);
 }
 
 function insertPriceTable(contractId) {
@@ -1515,10 +2138,8 @@ function editorFindReplace() {
 }
 
 function editorInviteCollaborate(contractId) {
-  const c = CONTRACTS.find(x => x.id === contractId);
-  const subject = encodeURIComponent(`Collaboration invite — ${c?.provider || ""} · Contract ${contractId}`);
-  const body = encodeURIComponent(`You have been invited to collaborate on contract ${contractId} (${c?.provider || ""}, ${c?.contractType || ""}).\n\nPlease review the document and add your comments.\n\nContract Edge — NZ Private Health Insurer`);
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  openCollabEditor(contractId);
+  showToast("Collab editor opened in new tab — share the URL with your colleague");
 }
 
 function saveContractEditor(contractId) {
@@ -2077,18 +2698,117 @@ function renderIntegrations() {
     </div>`;
 }
 
+function toggleAdminSubnav() {
+  const subnav = document.getElementById("adminSubnav");
+  const chevron = document.getElementById("adminChevron");
+  if (!subnav) return;
+  const open = subnav.classList.toggle("open");
+  if (chevron) chevron.style.transform = open ? "rotate(180deg)" : "";
+}
+
+function showAdmin(section) {
+  adminSection = section || "users";
+  const subnav = document.getElementById("adminSubnav");
+  const chevron = document.getElementById("adminChevron");
+  if (subnav && !subnav.classList.contains("open")) {
+    subnav.classList.add("open");
+    if (chevron) chevron.style.transform = "rotate(180deg)";
+  }
+  document.querySelectorAll(".nav-sub-item").forEach(el => {
+    el.classList.toggle("active", el.dataset.admin === adminSection);
+  });
+  renderedScreens.delete("admin");
+  showScreen("admin");
+}
+
 // ─── Screen: Admin Panel ─────────────────────────────────────────────────────
 
 function renderAdmin() {
-  document.getElementById("screen-admin").innerHTML = `
-    <div class="screen-header">
-      <div class="screen-header-top">
-        <div><div class="screen-title">Administration</div><div class="screen-sub">System configuration, roles, permissions, template management, and access control</div></div>
-      </div>
-    </div>
-    <div class="screen-body">
+  const sectionLabels = { users:"User Management", templates:"Template Repository", clauses:"Clause Library", pricing:"Pricing Repository", roles:"Rules & Role Permissions", settings:"System Settings" };
+  const subLabel = sectionLabels[adminSection] || "User Management";
 
-      <div class="admin-section-title">Rules & Role Permissions</div>
+  let bodyHtml = "";
+  if (adminSection === "users") {
+    bodyHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-muted)">${USERS.length} users · ${USERS.filter(u=>u.status==="active").length} active</div>
+        <button class="btn-sm outline">+ Invite User</button>
+      </div>
+      <div class="users-section">
+        <div class="users-table-header">
+          <div class="users-th">Name</div><div class="users-th">Email</div><div class="users-th">Role</div><div class="users-th">Status</div><div class="users-th">Last Login</div>
+        </div>
+        ${USERS.map(u => `
+          <div class="user-row">
+            <div class="user-row-name"><div class="user-initials" style="background:${u.avatarColor}">${u.initials}</div>${u.name}</div>
+            <div class="user-row-email">${u.email}</div>
+            <div class="user-row-role"><span class="status-pill ${u.role==="admin"?"negotiation":u.role==="senior_contract_manager"?"draft":u.role==="contract_manager"?"active":"lead"}" style="font-size:10px">${u.roleLabel}</span></div>
+            <div><span class="user-status-${u.status}">${u.status==="active"?"● Active":"● Inactive"}</span></div>
+            <div class="user-row-last">${u.lastLogin}</div>
+          </div>`).join("")}
+      </div>
+      <div class="admin-section-title" style="margin-top:24px">Contract Manager Assignments</div>
+      <div class="section-card" style="overflow:hidden">
+        <div class="users-table-header" style="grid-template-columns:2fr 1.5fr 100px 120px">
+          <div class="users-th">Provider</div><div class="users-th">Contract Manager</div><div class="users-th">Contracts</div><div class="users-th">Stage</div>
+        </div>
+        ${PROVIDERS.map(p => {
+          const sl = p.status==="contracted"?"Contracted":p.status==="negotiating"?"Negotiating":p.status==="under-review"?"Under Review":p.status==="contracting"?"Contracting":"Lead";
+          const sc = p.status==="contracted"?"contracted":p.status==="negotiating"||p.status==="contracting"?"in-negotiation":p.status==="under-review"?"pending":"lead";
+          return `<div class="user-row" style="grid-template-columns:2fr 1.5fr 100px 120px">
+            <div class="user-row-name" style="gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:${p.status==="contracted"?"var(--green)":p.status==="lead"?"var(--blue)":"var(--amber)"};flex-shrink:0"></div><span style="font-weight:600">${p.name}</span></div>
+            <div class="user-row-email">${p.relationshipOwner}</div>
+            <div style="font-size:12.5px">${p.contracts} contract${p.contracts!==1?"s":""}</div>
+            <div><span class="status-pill ${sc}" style="font-size:10px">${sl}</span></div>
+          </div>`;
+        }).join("")}
+      </div>`;
+  } else if (adminSection === "templates") {
+    bodyHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text-muted)">${TEMPLATES.length} templates · ${new Set(TEMPLATES.map(t=>t.category)).size} categories</div>
+        <button class="btn-sm primary" onclick="showScreen('templates')">Open Full Repository →</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        ${TEMPLATES.map(t => `
+          <div class="section-card" style="flex:1;min-width:240px;padding:14px 16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span class="model-chip ${t.model.toLowerCase()}" style="font-size:10px">${t.model}</span>
+              <span style="font-size:13px;font-weight:700">${t.name}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${t.description}</div>
+            <div style="font-size:11.5px;color:var(--text-muted)">${t.clauses} clauses · Used in ${t.usedIn} contracts · Updated ${t.lastUpdated}</div>
+          </div>`).join("")}
+      </div>`;
+  } else if (adminSection === "clauses") {
+    bodyHtml = `
+      <div style="margin-bottom:16px;font-size:13px;color:var(--text-muted)">${CLAUSES.length} clauses · <button class="btn-sm outline" style="display:inline-flex" onclick="showScreen('clauses')">Open Clause Library →</button></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${CLAUSES.map(cl => `
+          <div class="section-card" style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+            <span class="status-pill ${cl.status==="approved"?"active":"pending"}" style="font-size:10px;flex-shrink:0">${cl.status}</span>
+            <div style="flex:1"><div style="font-size:13px;font-weight:600">${cl.title}</div><div style="font-size:11.5px;color:var(--text-muted)">${cl.category} · ${cl.version} · Reviewed ${cl.lastReviewed}</div></div>
+            <div style="font-size:11px;color:var(--text-muted)">${cl.tags.map(tag=>`<span class="tag">${tag}</span>`).join("")}</div>
+          </div>`).join("")}
+      </div>`;
+  } else if (adminSection === "pricing") {
+    bodyHtml = `
+      <div style="margin-bottom:16px;font-size:13px;color:var(--text-muted)">${PRICING_SCHEDULES.length} procedure codes loaded</div>
+      <div class="section-card" style="overflow:hidden">
+        <div class="users-table-header" style="grid-template-columns:100px 2fr 1.5fr 1fr">
+          <div class="users-th">Code</div><div class="users-th">Procedure</div><div class="users-th">Category</div><div class="users-th">Base Rate</div>
+        </div>
+        ${PRICING_SCHEDULES.map(p => `
+          <div class="user-row" style="grid-template-columns:100px 2fr 1.5fr 1fr">
+            <div style="font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--blue)">${p.code}</div>
+            <div style="font-size:12.5px;font-weight:500">${p.name}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${p.category}</div>
+            <div style="font-size:12.5px;font-weight:600">$${p.baseRate.toLocaleString()} NZD</div>
+          </div>`).join("")}
+      </div>`;
+  } else if (adminSection === "roles") {
+    bodyHtml = `
+      <div style="margin-bottom:16px;font-size:13px;color:var(--text-muted)">Role definitions are read-only in this demo. Real-time RBAC enforcement is Phase 2.</div>
       <div class="admin-grid">
         ${ROLES.map(role => `
           <div class="role-card">
@@ -2101,71 +2821,10 @@ function renderAdmin() {
               ${role.permissions.map(p => `<div class="perm-tag ${p.allowed?"allowed":"denied"}">${p.name}</div>`).join("")}
             </div>
           </div>`).join("")}
-      </div>
-
-      <div class="admin-section-title" style="margin-top:28px">Contract Manager Assignments</div>
-      <div class="section-card" style="margin-bottom:24px;overflow:hidden">
-        <div class="users-table-header" style="grid-template-columns:2fr 1.5fr 100px 120px">
-          <div class="users-th">Provider</div>
-          <div class="users-th">Contract Manager</div>
-          <div class="users-th">Contracts</div>
-          <div class="users-th">Pipeline Stage</div>
-        </div>
-        ${PROVIDERS.map(p => {
-          const stageLabel = p.status==="contracted"?"Contracted":p.status==="negotiating"?"Negotiating":p.status==="under-review"?"Under Review":p.status==="contracting"?"Contracting":"Lead";
-          const stageClass = p.status==="contracted"?"contracted":p.status==="negotiating"||p.status==="contracting"?"in-negotiation":p.status==="under-review"?"pending":"lead";
-          return `<div class="user-row" style="grid-template-columns:2fr 1.5fr 100px 120px">
-            <div class="user-row-name" style="gap:8px">
-              <div style="width:7px;height:7px;border-radius:50%;background:${p.status==="contracted"?"var(--green)":p.status==="lead"?"var(--blue)":"var(--amber)"};flex-shrink:0"></div>
-              <span style="font-weight:600">${p.name}</span>
-            </div>
-            <div class="user-row-email">${p.relationshipOwner}</div>
-            <div style="font-size:12.5px">${p.contracts} contract${p.contracts!==1?"s":""}</div>
-            <div><span class="status-pill ${stageClass}" style="font-size:10px">${stageLabel}</span></div>
-          </div>`;
-        }).join("")}
-      </div>
-
-      <div class="admin-section-title" style="margin-top:28px">Template Repository</div>
-      <div class="section-card" style="margin-bottom:24px;padding:18px 20px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px">
-          <div>
-            <div style="font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:3px">${TEMPLATES.length} Contract Templates</div>
-            <div style="font-size:12px;color:var(--text-muted)">${new Set(TEMPLATES.map(t=>t.category)).size} categories · ${TEMPLATES.reduce((s,t)=>s+t.usedIn,0)} active deployments across the network</div>
-          </div>
-          <button class="btn-sm primary" onclick="showScreen('templates')">Open Template Repository →</button>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${TEMPLATES.map(t => `<span style="font-size:11.5px;padding:4px 10px;background:var(--surface-hover);border:1px solid var(--border);border-radius:6px;color:var(--text);display:inline-flex;align-items:center;gap:5px"><span class="model-chip ${t.model.toLowerCase()}" style="font-size:9px;padding:1px 4px">${t.model}</span>${t.name}</span>`).join("")}
-        </div>
-      </div>
-
-      <div class="admin-section-title" style="margin-top:28px">Users</div>
-      <div class="users-section" style="margin-bottom:24px">
-        <div class="users-table-header">
-          <div class="users-th">Name</div>
-          <div class="users-th">Email</div>
-          <div class="users-th">Role</div>
-          <div class="users-th">Status</div>
-          <div class="users-th">Last Login</div>
-        </div>
-        ${USERS.map(u => `
-          <div class="user-row">
-            <div class="user-row-name">
-              <div class="user-initials" style="background:${u.avatarColor}">${u.initials}</div>
-              ${u.name}
-            </div>
-            <div class="user-row-email">${u.email}</div>
-            <div class="user-row-role">
-              <span class="status-pill ${u.role==="admin"?"negotiation":u.role==="senior_contract_manager"?"draft":u.role==="contract_manager"?"active":"lead"}" style="font-size:10px">${u.roleLabel}</span>
-            </div>
-            <div><span class="user-status-${u.status}">${u.status==="active"?"● Active":"● Inactive"}</span></div>
-            <div class="user-row-last">${u.lastLogin}</div>
-          </div>`).join("")}
-      </div>
-
-      <div class="admin-section-title" style="margin-top:28px">System Settings</div>
-      <div class="section-card" style="margin-bottom:24px">
+      </div>`;
+  } else if (adminSection === "settings") {
+    bodyHtml = `
+      <div class="section-card" style="margin-bottom:16px">
         <div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text);margin-bottom:5px">Audit Log Retention</div><div style="font-size:13px;font-weight:600">7 Years</div><div style="font-size:11.5px;color:var(--text-muted)">CoFI Act compliant · Immutable</div></div>
           <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text);margin-bottom:5px">Data Residency</div><div style="font-size:13px;font-weight:600">AWS Sydney</div><div style="font-size:11.5px;color:var(--text-muted)">NZ data residency law compliant</div></div>
@@ -2176,8 +2835,7 @@ function renderAdmin() {
           <span class="tag">WCAG 2.1 AA ✓</span><span class="tag">NZ Privacy Act 2020 ✓</span><span class="tag">CoFI Act ✓</span><span class="tag">AWS Sydney ✓</span>
         </div>
       </div>
-
-      <div class="section-card" style="margin-bottom:24px">
+      <div class="section-card">
         <div class="section-card-header"><span class="section-card-title">CoFI & Audit Compliance</span></div>
         <div style="padding:14px 18px;font-size:12.5px;color:var(--text);line-height:1.7">
           Every action in Contract Edge is <strong>immutably logged</strong> with the user's identity, role, timestamp, and full record state.
@@ -2186,9 +2844,19 @@ function renderAdmin() {
         <div style="padding:0 18px 14px;display:flex;gap:6px;flex-wrap:wrap">
           <span class="tag">CoFI Act ✓</span><span class="tag">7-year retention ✓</span><span class="tag">Immutable log ✓</span><span class="tag">Role-based access ✓</span><span class="tag">NZ Privacy Act ✓</span>
         </div>
-      </div>
+      </div>`;
+  }
 
-    </div>`;
+  document.getElementById("screen-admin").innerHTML = `
+    <div class="screen-header">
+      <div class="screen-header-top">
+        <div>
+          <div class="screen-title">Admin — ${subLabel}</div>
+          <div class="screen-sub">Administration · ${subLabel}</div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-body">${bodyHtml}</div>`;
 }
 
 // ─── Contract Preview ─────────────────────────────────────────────────────────

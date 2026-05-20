@@ -271,7 +271,85 @@ All data lives in `app.js`. The following need to be added or updated:
 | Excel upload for pricing import | Phase 2 |
 | Real Outlook OAuth / Microsoft Graph integration | Phase 2 |
 | Per-contact compliance document tracking | Phase 2 |
-| Live backend / database | Phase 2 |
 | Value-Based Contracting | Phase 4 |
 | HL7/EDI adaptors | Phase 2 |
 | OceanInsights deep analytics | Phase 2 |
+| Bulk CSV provider import (logic) | Phase 2 |
+| Real role-based access control enforcement | Phase 2 |
+
+---
+
+## Session 2 Decisions — 2026-05-20
+
+> All decisions below were agreed during the product grilling session on 2026-05-20.
+
+### Backend
+
+- Add a lightweight **Node.js/Express backend** with JSON file or SQLite as the data store.
+- Backend owns: **Providers, Contracts, Approvals, Activity Logs** — the four things that change during a demo.
+- Reference data (Clauses, Templates, Pricing Schedules, Users) stays as **seed files** — read-only, consumed by workflows but not stored in the DB.
+- The backend is swappable for a real database later without restructuring the UI.
+
+### Collab-Editor Integration
+
+- The `collab-editor` Next.js app stays separate — **not merged** into the main POC.
+- It is wired to the shared backend: "Edit Contract" fetches real contract data from the backend instead of hardcoded `lib/data.ts`.
+- Clicking "Edit Contract" opens the collab-editor in a **new browser tab**.
+- The Liveblocks room ID = the contract ID, so two users editing the same contract are automatically in the same room.
+
+### Contract Creation Workflow
+
+- A **3-step wizard** modal triggered from "+ New Contract" on the Contract Registry:
+  - **Step 1 — Definition:** Provider (contracted only), contract type, effective date, expiry, relationship owner.
+  - **Step 2 — Starting Point:** Choose "Start from scratch" or "Use a template" (searchable template library shown here).
+  - **Step 3:** New contract saved to backend as Draft, collab-editor opens in new tab pre-loaded with content.
+- The Provider Profile "Create New Contract" button skips Step 1 (provider pre-filled).
+- After wizard completes, the new Draft contract **appears automatically** in the Contract Registry list without a refresh.
+- **Navigation (back/forward/back button) must be precise and contextual throughout the entire app** — no jumps to dashboard or wrong screens.
+
+### Provider: Adding & Addresses
+
+- "+ Add Provider" modal: one provider at a time with a **"Save & Add Another"** option.
+- **Provider Type** is a required field (Hospital / Specialist / Allied Health / GP / Diagnostic / Aged Care).
+- **Bulk Upload (CSV)** button visible but shows "Phase 2 — coming soon" tooltip. No CSV logic built yet.
+- Fix the broken "Add Provider" flow so newly added providers persist and appear on the Kanban.
+- Provider detail page must show **address**. Address fields: Street, City, Postcode, Region. Single address per provider. Addresses must be editable.
+
+### Contract Locking After Signing
+
+- **Active status = signed = locked.**
+- Users with role "Administrator" or "Senior Contract Manager" see an **"Override & Edit"** button with a confirmation prompt: *"This contract is active and locked. Editing will be logged. Continue?"*
+- All other users see a **disabled Edit button** with a tooltip explaining the contract is locked.
+- Access control is **cosmetic only for the demo** — no real role gating enforced. Everyone has full access.
+
+### Grid Filters — Bug Fixes
+
+Three confirmed bugs to fix:
+1. **Contract Registry:** Clicking a status filter pill completely re-renders the screen, wiping any typed search text.
+2. **Contract Registry:** Model dropdown calls `filterContracts('', this.value)` — hardcodes empty string for search, losing the user's typed text.
+3. **Provider Registry (contracted providers grid):** No search or filter exists at all — must be added.
+
+### Admin Menu
+
+- **Admin** becomes a top-level nav item with submenus:
+  - User Management
+  - Template Repository (moved from main nav)
+  - Clause Library (also remains in main nav for daily use)
+  - Pricing Repository
+  - Rules & Role Permissions
+  - System Settings
+- Access control is cosmetic — all users can access all Admin submenus for the demo.
+
+### Insert Clause — Search UI
+
+- Clicking **"Insert Clause"** in the contract editor must open a **search/browse panel** to find and select a clause first — it must not insert blindly.
+- User searches, selects a clause, then it inserts at cursor.
+
+### Save as Template
+
+- A **"Save as Template"** button is always visible on the contract detail view (any status).
+- Clicking it opens a modal asking for:
+  - Template name
+  - Category (MSA / Individual Pricing / Surgical Elective / Government Contract)
+  - Short description (optional)
+- On save, the template appears immediately in the Template Repository.

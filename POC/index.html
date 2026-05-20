@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Contract Edge — Provider Contract Management</title>
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=4" />
   <!-- LiveKit JS SDK — voice + chat for the Smart Contract Assistant -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
 </head>
@@ -86,10 +86,19 @@
 
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
-        <button class="nav-item" data-screen="admin" onclick="showScreen('admin')">
+        <button class="nav-item nav-item-parent" data-screen="admin" id="adminNavBtn" onclick="toggleAdminSubnav()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Admin Panel</span>
+          <span>Admin</span>
+          <svg class="nav-chevron" id="adminChevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
+        <div class="nav-subnav" id="adminSubnav">
+          <button class="nav-sub-item" data-admin="users"    onclick="showAdmin('users')">User Management</button>
+          <button class="nav-sub-item" data-admin="templates" onclick="showAdmin('templates')">Template Repository</button>
+          <button class="nav-sub-item" data-admin="clauses"  onclick="showAdmin('clauses')">Clause Library</button>
+          <button class="nav-sub-item" data-admin="pricing"  onclick="showAdmin('pricing')">Pricing Repository</button>
+          <button class="nav-sub-item" data-admin="roles"    onclick="showAdmin('roles')">Rules & Role Permissions</button>
+          <button class="nav-sub-item" data-admin="settings" onclick="showAdmin('settings')">System Settings</button>
+        </div>
       </div>
 
     </nav>
@@ -195,6 +204,6 @@
   </div>
 
 </div>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
