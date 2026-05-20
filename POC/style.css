@@ -1239,6 +1239,9 @@ textarea#messageInput::placeholder { color: var(--text-subtle); }
 .preview-calc-table tr:last-child td { border-bottom: none; }
 
 /* ─── Admin sidebar submenu ──────────────────────────────────────────────────── */
+.kanban-card-address { font-size: 11px; color: var(--text-subtle); margin-top: 2px; margin-bottom: 4px; }
+
+/* ─── Admin sidebar submenu ──────────────────────────────────────────────────── */
 .nav-item-parent { justify-content: space-between; }
 .nav-chevron { margin-left: auto; flex-shrink: 0; transition: transform 0.2s; }
 .nav-subnav { display: none; flex-direction: column; padding-left: 28px; gap: 1px; overflow: hidden; }

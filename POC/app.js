@@ -94,6 +94,7 @@ const CLAUSES = [
 const PROVIDERS = [
   {
     id:"PRV-001", name:"Auckland Surgical Centre", city:"Auckland",
+    street:"210 Remuera Road", postcode:"1050", region:"Auckland",
     type:"Surgical Centre", tier:"gold", status:"contracted",
     contracts:3, hpiOrgId:"G00001-K", hpiFacilityCode:"F00034",
     nzbn:"9429041000001", specialty:"Orthopaedics",
@@ -127,6 +128,7 @@ const PROVIDERS = [
   },
   {
     id:"PRV-002", name:"Wellington Orthopaedics", city:"Wellington",
+    street:"50 Manners Street", postcode:"6011", region:"Wellington",
     type:"Specialist Clinic", tier:"gold", status:"contracted",
     contracts:1, hpiOrgId:"G00012-M", hpiFacilityCode:"F00089",
     nzbn:"9429041000002", specialty:"Orthopaedics",
@@ -158,6 +160,7 @@ const PROVIDERS = [
   },
   {
     id:"PRV-003", name:"Christchurch Surgical Centre", city:"Christchurch",
+    street:"76 Riccarton Road", postcode:"8041", region:"Canterbury",
     type:"Surgical Centre", tier:"silver", status:"negotiating",
     contracts:0, hpiOrgId:"G00023-P", hpiFacilityCode:"F00112",
     nzbn:"9429041000003", specialty:"Orthopaedics",
@@ -190,6 +193,7 @@ const PROVIDERS = [
   },
   {
     id:"PRV-004", name:"Wellington Regional Hospital", city:"Wellington",
+    street:"49 Riddiford Street", postcode:"6021", region:"Wellington",
     type:"Hospital", tier:"platinum", status:"contracted",
     contracts:1, hpiOrgId:"G00045-R", hpiFacilityCode:"F00156",
     nzbn:"9429041000004", specialty:"Multi-Specialty",
@@ -221,6 +225,7 @@ const PROVIDERS = [
   },
   {
     id:"PRV-005", name:"Dunedin Surgical Group", city:"Dunedin",
+    street:"83 Stuart Street", postcode:"9016", region:"Otago",
     type:"Surgical Centre", tier:"standard", status:"contracting",
     contracts:0, hpiOrgId:"G00067-T", hpiFacilityCode:"F00198",
     nzbn:"9429041000005", specialty:"Orthopaedics",
@@ -252,6 +257,7 @@ const PROVIDERS = [
   },
   {
     id:"PRV-006", name:"Hamilton Health Partners", city:"Hamilton",
+    street:"14 Ward Street", postcode:"3204", region:"Waikato",
     type:"Specialist Clinic", tier:"standard", status:"under-review",
     contracts:0, hpiOrgId:"G00089-W", hpiFacilityCode:"F00234",
     nzbn:"9429041000006", specialty:"Specialist Outpatient",
@@ -1119,7 +1125,8 @@ function renderNetworkList() {
           : col.providers.map(p => `
               <div class="kanban-card" onclick="openProviderProfile('${p.id}')">
                 <div class="kanban-card-name">${p.name}</div>
-                <div class="kanban-card-meta">${p.city} · ${p.specialty}</div>
+                <div class="kanban-card-meta">${p.specialty}</div>
+                <div class="kanban-card-address">${[p.street, p.city, p.postcode].filter(Boolean).join(", ")}</div>
                 <div class="kanban-card-footer">
                   <span class="tier-badge tier-${p.tier}">${p.tier.charAt(0).toUpperCase()+p.tier.slice(1)}</span>
                   <span class="kanban-card-owner">${p.relationshipOwner}</span>
@@ -1400,7 +1407,8 @@ function renderProviderProfile() {
           <div>
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">Provider Network → ${p.name}</div>
             <div class="screen-title">${p.name}</div>
-            <div class="screen-sub">${p.type} · ${p.city} · ${p.specialty}</div>
+            <div class="screen-sub">${p.type} · ${p.specialty}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${[p.street, p.city, p.postcode, p.region].filter(Boolean).join(", ") || p.city}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1420,6 +1428,7 @@ function renderProviderProfile() {
             <div><div style="color:var(--text-muted);margin-bottom:2px">Facility Code</div><div style="font-family:var(--font-mono);font-weight:600">${p.hpiFacilityCode}</div></div>
             <div><div style="color:var(--text-muted);margin-bottom:2px">NZBN</div><div style="font-family:var(--font-mono);font-weight:600">${p.nzbn}</div></div>
             <div><div style="color:var(--text-muted);margin-bottom:2px">Relationship Owner</div><div style="font-weight:600">${p.relationshipOwner}</div></div>
+            <div style="grid-column:1/-1"><div style="color:var(--text-muted);margin-bottom:2px">Address</div><div style="font-weight:600">${[p.street, p.city, p.postcode, p.region].filter(Boolean).join(", ") || "—"}</div></div>
           </div>
         </div>
 
