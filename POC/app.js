@@ -22,7 +22,7 @@ let providerRegistrySearch = "";
 let adminSection = "users";
 let wizardStep = 1;
 let wizardData = {};
-const COLLAB_EDITOR_URL = "http://localhost:3000";
+const COLLAB_EDITOR_URL = "http://localhost:3001";
 
 // ─── Synthetic data ───────────────────────────────────────────────────────────
 
